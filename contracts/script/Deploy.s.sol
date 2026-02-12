@@ -6,6 +6,7 @@ import {console} from "forge-std/console.sol";
 import "../src/IdentityRegistry.sol";
 import "../src/ReputationRegistry.sol";
 import "../src/ValidationRegistry.sol";
+import "../src/CampaignRegistry.sol";
 
 /**
  * @title Deploy
@@ -35,13 +36,19 @@ contract Deploy is Script {
         console.log("\n3. Deploying ValidationRegistry...");
         ValidationRegistry validationRegistry = new ValidationRegistry(address(identityRegistry));
         console.log("ValidationRegistry deployed at:", address(validationRegistry));
-        
+
+        // Deploy CampaignRegistry (depends on IdentityRegistry)
+        console.log("\n4. Deploying CampaignRegistry...");
+        CampaignRegistry campaignRegistry = new CampaignRegistry(address(identityRegistry));
+        console.log("CampaignRegistry deployed at:", address(campaignRegistry));
+
         vm.stopBroadcast();
-        
+
         console.log("\n=== Deployment Summary ===");
         console.log("IdentityRegistry:", address(identityRegistry));
         console.log("ReputationRegistry:", address(reputationRegistry));
         console.log("ValidationRegistry:", address(validationRegistry));
+        console.log("CampaignRegistry:", address(campaignRegistry));
         console.log("\nRegistration fee:", identityRegistry.REGISTRATION_FEE());
         console.log("Validation expiration slots:", validationRegistry.getExpirationSlots());
     }
