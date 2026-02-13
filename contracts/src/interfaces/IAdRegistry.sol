@@ -57,8 +57,6 @@ interface IAdRegistry {
     error AdNotFound();
     error CampaignNotFound();
     error CampaignNotActive();
-    error AdvertiserNotFound();
-    error PublisherNotFound();
     error UnauthorizedCaller();
     error InvalidStartTime();
 

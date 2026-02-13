@@ -76,7 +76,6 @@ interface ICampaignRegistry {
 
     // ============ Errors ============
 
-    error AdvertiserNotFound();
     error UnauthorizedCaller();
     error InvalidBudgetAmount();
     error InvalidTokenAddress();

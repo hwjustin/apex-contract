@@ -3,7 +3,7 @@
 pragma solidity ^0.8.19;
 
 import "./interfaces/ICampaignRegistry.sol";
-import "./interfaces/IIdentityRegistry.sol";
+import {IERC721} from "forge-std/interfaces/IERC721.sol";
 
 /**
  * @title CampaignRegistry
@@ -14,8 +14,8 @@ import "./interfaces/IIdentityRegistry.sol";
 contract CampaignRegistry is ICampaignRegistry {
     // ============ State Variables ============
 
-    /// @dev Reference to the IdentityRegistry for advertiser validation
-    IIdentityRegistry public immutable identityRegistry;
+    /// @dev Reference to the EIP-8004 Identity Registry (ERC-721)
+    IERC721 public immutable identityRegistry;
 
     /// @dev Counter for campaign IDs
     uint256 private _campaignIdCounter;
@@ -33,7 +33,7 @@ contract CampaignRegistry is ICampaignRegistry {
      * @param _identityRegistry Address of the IdentityRegistry contract
      */
     constructor(address _identityRegistry) {
-        identityRegistry = IIdentityRegistry(_identityRegistry);
+        identityRegistry = IERC721(_identityRegistry);
         // Start campaign IDs from 1 (0 is reserved for "not found")
         _campaignIdCounter = 1;
     }
@@ -52,11 +52,8 @@ contract CampaignRegistry is ICampaignRegistry {
         bytes calldata spec
     ) external returns (uint256 campaignId) {
         // Validate advertiser exists and caller is authorized
-        IIdentityRegistry.AgentInfo memory advertiserInfo = identityRegistry.getAgent(advertiserId);
-        if (advertiserInfo.agentId == 0) {
-            revert AdvertiserNotFound();
-        }
-        if (advertiserInfo.agentAddress != msg.sender) {
+        address advertiserOwner = identityRegistry.ownerOf(advertiserId); // reverts if agent doesn't exist
+        if (advertiserOwner != msg.sender) {
             revert UnauthorizedCaller();
         }
 
@@ -117,8 +114,8 @@ contract CampaignRegistry is ICampaignRegistry {
         }
 
         // Validate caller is authorized to update this campaign
-        IIdentityRegistry.AgentInfo memory advertiserInfo = identityRegistry.getAgent(campaign.advertiserId);
-        if (advertiserInfo.agentAddress != msg.sender) {
+        address advertiserOwner = identityRegistry.ownerOf(campaign.advertiserId); // reverts if agent doesn't exist
+        if (advertiserOwner != msg.sender) {
             revert UnauthorizedCaller();
         }
 

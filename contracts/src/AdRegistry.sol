@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "./interfaces/IAdRegistry.sol";
-import "./interfaces/IIdentityRegistry.sol";
+import {IERC721} from "forge-std/interfaces/IERC721.sol";
 import "./interfaces/ICampaignRegistry.sol";
 
 /**
@@ -13,8 +13,8 @@ import "./interfaces/ICampaignRegistry.sol";
 contract AdRegistry is IAdRegistry {
     // ============ State Variables ============
 
-    /// @dev Reference to the IdentityRegistry for agent validation
-    IIdentityRegistry public immutable identityRegistry;
+    /// @dev Reference to the EIP-8004 Identity Registry (ERC-721)
+    IERC721 public immutable identityRegistry;
 
     /// @dev Reference to the CampaignRegistry for campaign validation
     ICampaignRegistry public immutable campaignRegistry;
@@ -42,7 +42,7 @@ contract AdRegistry is IAdRegistry {
      * @param _campaignRegistry Address of the CampaignRegistry contract
      */
     constructor(address _identityRegistry, address _campaignRegistry) {
-        identityRegistry = IIdentityRegistry(_identityRegistry);
+        identityRegistry = IERC721(_identityRegistry);
         campaignRegistry = ICampaignRegistry(_campaignRegistry);
         // Start ad IDs from 1 (0 is reserved for "not found")
         _adIdCounter = 1;
@@ -71,20 +71,12 @@ contract AdRegistry is IAdRegistry {
         ICampaignRegistry.Campaign memory campaign = campaignRegistry.getCampaign(campaignId);
         uint256 advertiserId = campaign.advertiserId;
 
-        // Validate advertiser exists
-        IIdentityRegistry.AgentInfo memory advertiserInfo = identityRegistry.getAgent(advertiserId);
-        if (advertiserInfo.agentId == 0) {
-            revert AdvertiserNotFound();
-        }
-
-        // Validate publisher exists
-        IIdentityRegistry.AgentInfo memory publisherInfo = identityRegistry.getAgent(publisherId);
-        if (publisherInfo.agentId == 0) {
-            revert PublisherNotFound();
-        }
+        // Validate advertiser and publisher exist (ownerOf reverts if not found)
+        address advertiserOwner = identityRegistry.ownerOf(advertiserId);
+        address publisherOwner = identityRegistry.ownerOf(publisherId);
 
         // Allow either advertiser or publisher to create the ad
-        if (advertiserInfo.agentAddress != msg.sender && publisherInfo.agentAddress != msg.sender) {
+        if (advertiserOwner != msg.sender && publisherOwner != msg.sender) {
             revert UnauthorizedCaller();
         }
 
@@ -128,8 +120,8 @@ contract AdRegistry is IAdRegistry {
         }
 
         // Validate caller is authorized (must be the advertiser)
-        IIdentityRegistry.AgentInfo memory advertiserInfo = identityRegistry.getAgent(ad.advertiserId);
-        if (advertiserInfo.agentAddress != msg.sender) {
+        address advertiserOwner = identityRegistry.ownerOf(ad.advertiserId); // reverts if agent doesn't exist
+        if (advertiserOwner != msg.sender) {
             revert UnauthorizedCaller();
         }
 
