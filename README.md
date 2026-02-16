@@ -12,7 +12,7 @@ forge install foundry-rs/forge-std
 
 Setup Environmental Variables
 ```
-BASE_SEPOLIA_RPC_URL=
+BASE_RPC_URL=
 PRIVATE_KEY=
 BASESCAN_API_KEY=
 ```
@@ -31,7 +31,7 @@ cd contracts
 forge build
 
 forge script script/Deploy.s.sol \
-  --rpc-url base_sepolia \
+  --rpc-url base \
   --broadcast \
   --verify
 ```
