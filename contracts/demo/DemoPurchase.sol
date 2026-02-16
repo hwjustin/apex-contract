@@ -20,8 +20,8 @@ contract DemoPurchase is IDemoPurchase {
     /// @dev Reference to the EIP-8004 Identity Registry (ERC-721)
     IERC721 public immutable identityRegistry;
 
-    /// @dev USDC token on Base Sepolia
-    IERC20 public constant USDC = IERC20(0x036CbD53842c5426634e7929541eC2318f3dCF7e);
+    /// @dev USDC token on Base Mainnet
+    IERC20 public constant USDC = IERC20(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
 
     /// @dev Counter for product IDs (starts at 1)
     uint256 private _productIdCounter;

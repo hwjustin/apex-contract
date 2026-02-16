@@ -34,5 +34,15 @@ forge script script/Deploy.s.sol \
   --rpc-url base \
   --broadcast \
   --verify
+
+forge script script/DeployDemo.s.sol \
+  --rpc-url base \
+  --broadcast \
+  --verify
+
+forge script script/CreateProduct.s.sol \
+  --rpc-url base \
+  --broadcast \
+  --verify
 ```
 

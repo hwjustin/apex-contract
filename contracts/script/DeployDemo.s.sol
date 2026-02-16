@@ -15,8 +15,8 @@ import "../demo/DemoPurchase.sol";
  *   forge script script/DeployDemo.s.sol --rpc-url base_sepolia --broadcast --verify
  */
 contract DeployDemo is Script {
-    /// @dev EIP-8004 Identity Registry on Base Sepolia
-    address constant IDENTITY_REGISTRY = 0x8004A818BFB912233c491871b3d84c89A494BD9e;
+    /// @dev EIP-8004 Identity Registry on Base Mainnet
+    address constant IDENTITY_REGISTRY = 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432;
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");

@@ -8,7 +8,7 @@ import "../demo/DemoPurchase.sol";
 
 /**
  * @title CreateProduct
- * @dev Script to create a product in the deployed DemoPurchase contract on Base Sepolia
+ * @dev Script to create a product in the deployed DemoPurchase contract on Base Mainnet
  * @notice Prerequisites:
  *   1. Run DeployDemo.s.sol to deploy DemoPurchase contract
  *   2. Update DEMO_PURCHASE constant with deployed address
@@ -17,14 +17,14 @@ import "../demo/DemoPurchase.sol";
  *   5. Set ADVERTISER_PRIVATE_KEY env var - must match the agentAddress for that advertiserId
  *
  * Usage:
- *   forge script script/CreateProduct.s.sol --rpc-url base_sepolia --broadcast
+ *   forge script script/CreateProduct.s.sol --rpc-url base --broadcast
  */
 contract CreateProduct is Script {
-    /// @dev EIP-8004 Identity Registry on Base Sepolia
-    address constant IDENTITY_REGISTRY = 0x8004A818BFB912233c491871b3d84c89A494BD9e;
+    /// @dev EIP-8004 Identity Registry on Base Mainnet
+    address constant IDENTITY_REGISTRY = 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432;
 
-    /// @dev DemoPurchase contract on Base Sepolia
-    address constant DEMO_PURCHASE = 0xe9A8C0a1f5aC4788840d8820A10555f9da8bF38D;
+    /// @dev DemoPurchase contract on Base Mainnet
+    address constant DEMO_PURCHASE = 0x7F34ec8B18E05AF38d771Cb50382fA15FC30a1d1;
 
     function run() external {
         require(DEMO_PURCHASE != address(0), "Please update DEMO_PURCHASE address first");
@@ -33,7 +33,7 @@ contract CreateProduct is Script {
         address advertiserAddress = vm.addr(advertiserPrivateKey);
 
         // Product details - customize these
-        uint256 advertiserId = 632;
+        uint256 advertiserId = 17854;
         string memory productName = "Demo Product";
         string memory productDescription = "This is a demo product for testing";
         uint256 productPrice = 1 * 1e6; // 10 USDC (6 decimals)
