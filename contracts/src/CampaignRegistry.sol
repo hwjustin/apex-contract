@@ -5,10 +5,16 @@ pragma solidity ^0.8.19;
 import "./interfaces/ICampaignRegistry.sol";
 import {IERC721} from "forge-std/interfaces/IERC721.sol";
 
+interface IERC20 {
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function transfer(address to, uint256 amount) external returns (bool);
+}
+
 /**
  * @title CampaignRegistry
- * @dev Registry for managing advertising campaigns
- * @notice Allows advertisers to create and manage ad campaigns with budget and timing controls
+ * @dev Registry for managing advertising campaigns with budget escrow and CPA payments
+ * @notice Allows advertisers to create campaigns with escrowed budgets, validators to trigger
+ *         CPA payments to publishers, and advertisers to reclaim unspent funds after expiry
  * @author APEX Network
  */
 contract CampaignRegistry is ICampaignRegistry {
@@ -25,6 +31,9 @@ contract CampaignRegistry is ICampaignRegistry {
 
     /// @dev Mapping from advertiser ID to their campaign IDs
     mapping(uint256 => uint256[]) private _advertiserCampaigns;
+
+    /// @dev Mapping from action hash to whether it has been processed
+    mapping(bytes32 => bool) private _processedActions;
 
     // ============ Constructor ============
 
@@ -47,6 +56,7 @@ contract CampaignRegistry is ICampaignRegistry {
         uint256 advertiserId,
         uint256 budgetAmount,
         address budgetTokenAddress,
+        uint256 cpaAmount,
         uint256 startTime,
         uint256 expiryTime,
         bytes calldata spec
@@ -64,11 +74,20 @@ contract CampaignRegistry is ICampaignRegistry {
         if (budgetTokenAddress == address(0)) {
             revert InvalidTokenAddress();
         }
+        if (cpaAmount == 0 || cpaAmount > budgetAmount) {
+            revert InvalidCpaAmount();
+        }
         if (startTime >= expiryTime) {
             revert InvalidTimeRange();
         }
         if (expiryTime <= block.timestamp) {
             revert CampaignAlreadyExpired();
+        }
+
+        // Escrow budget tokens from advertiser
+        bool success = IERC20(budgetTokenAddress).transferFrom(msg.sender, address(this), budgetAmount);
+        if (!success) {
+            revert TransferFailed();
         }
 
         // Assign new campaign ID
@@ -77,6 +96,8 @@ contract CampaignRegistry is ICampaignRegistry {
         // Create budget struct
         Budget memory budget = Budget({
             amount: budgetAmount,
+            spent: 0,
+            cpaAmount: cpaAmount,
             tokenAddress: budgetTokenAddress
         });
 
@@ -93,7 +114,7 @@ contract CampaignRegistry is ICampaignRegistry {
         // Track advertiser's campaigns
         _advertiserCampaigns[advertiserId].push(campaignId);
 
-        emit CampaignCreated(campaignId, advertiserId, budgetAmount, budgetTokenAddress, startTime, expiryTime);
+        emit CampaignCreated(campaignId, advertiserId, budgetAmount, budgetTokenAddress, cpaAmount, startTime, expiryTime);
     }
 
     /**
@@ -101,8 +122,7 @@ contract CampaignRegistry is ICampaignRegistry {
      */
     function updateCampaign(
         uint256 campaignId,
-        uint256 budgetAmount,
-        address budgetTokenAddress,
+        uint256 cpaAmount,
         uint256 startTime,
         uint256 expiryTime,
         bytes calldata spec
@@ -119,12 +139,10 @@ contract CampaignRegistry is ICampaignRegistry {
             revert UnauthorizedCaller();
         }
 
-        // Validate inputs
-        if (budgetAmount == 0) {
-            revert InvalidBudgetAmount();
-        }
-        if (budgetTokenAddress == address(0)) {
-            revert InvalidTokenAddress();
+        // Validate CPA against remaining budget
+        uint256 remaining = campaign.budget.amount - campaign.budget.spent;
+        if (cpaAmount == 0 || cpaAmount > remaining) {
+            revert InvalidCpaAmount();
         }
         if (startTime >= expiryTime) {
             revert InvalidTimeRange();
@@ -133,15 +151,107 @@ contract CampaignRegistry is ICampaignRegistry {
             revert CampaignAlreadyExpired();
         }
 
-        // Update campaign
-        campaign.budget.amount = budgetAmount;
-        campaign.budget.tokenAddress = budgetTokenAddress;
+        // Update campaign (budget amount and token are immutable)
+        campaign.budget.cpaAmount = cpaAmount;
         campaign.startTime = startTime;
         campaign.expiryTime = expiryTime;
         campaign.spec = spec;
 
-        emit CampaignUpdated(campaignId, budgetAmount, budgetTokenAddress, startTime, expiryTime);
+        emit CampaignUpdated(campaignId, cpaAmount, startTime, expiryTime);
         return true;
+    }
+
+    /**
+     * @inheritdoc ICampaignRegistry
+     */
+    function processAction(
+        uint256 campaignId,
+        uint256 publisherId,
+        uint256 validatorId,
+        bytes32 actionHash
+    ) external {
+        // Validate campaign exists
+        Campaign storage campaign = _campaigns[campaignId];
+        if (campaign.campaignId == 0) {
+            revert CampaignNotFound();
+        }
+
+        // Validate campaign is active (time window)
+        if (block.timestamp < campaign.startTime || block.timestamp >= campaign.expiryTime) {
+            revert CampaignNotActive();
+        }
+
+        // Check for duplicate action
+        if (_processedActions[actionHash]) {
+            revert ActionAlreadyProcessed();
+        }
+
+        // Check remaining budget
+        uint256 remaining = campaign.budget.amount - campaign.budget.spent;
+        uint256 cpa = campaign.budget.cpaAmount;
+        if (remaining < cpa) {
+            revert InsufficientBudget();
+        }
+
+        // Verify caller is the validator owner
+        address validatorOwner = identityRegistry.ownerOf(validatorId); // reverts if doesn't exist
+        if (validatorOwner != msg.sender) {
+            revert UnauthorizedCaller();
+        }
+
+        // Resolve publisher owner
+        address publisherOwner = identityRegistry.ownerOf(publisherId); // reverts if doesn't exist
+
+        // Effects before interactions (checks-effects-interactions)
+        _processedActions[actionHash] = true;
+        campaign.budget.spent += cpa;
+
+        // Transfer CPA payment to publisher owner
+        bool success = IERC20(campaign.budget.tokenAddress).transfer(publisherOwner, cpa);
+        if (!success) {
+            revert TransferFailed();
+        }
+
+        emit ActionProcessed(campaignId, publisherId, validatorId, cpa, actionHash);
+    }
+
+    /**
+     * @inheritdoc ICampaignRegistry
+     */
+    function withdrawRemainingBudget(uint256 campaignId) external returns (uint256 amountWithdrawn) {
+        // Validate campaign exists
+        Campaign storage campaign = _campaigns[campaignId];
+        if (campaign.campaignId == 0) {
+            revert CampaignNotFound();
+        }
+
+        // Only advertiser owner can withdraw
+        address advertiserOwner = identityRegistry.ownerOf(campaign.advertiserId);
+        if (advertiserOwner != msg.sender) {
+            revert UnauthorizedCaller();
+        }
+
+        // Campaign must be expired
+        if (block.timestamp < campaign.expiryTime) {
+            revert CampaignStillActive();
+        }
+
+        // Calculate remaining budget
+        amountWithdrawn = campaign.budget.amount - campaign.budget.spent;
+        if (amountWithdrawn == 0) {
+            revert InsufficientBudget();
+        }
+
+        // Zero out before transfer (checks-effects-interactions)
+        campaign.budget.spent = campaign.budget.amount;
+
+        // Transfer remaining tokens to advertiser owner
+        bool success = IERC20(campaign.budget.tokenAddress).transfer(advertiserOwner, amountWithdrawn);
+        if (!success) {
+            revert TransferFailed();
+        }
+
+        emit BudgetWithdrawn(campaignId, campaign.advertiserId, amountWithdrawn);
     }
 
     // ============ Read Functions ============
@@ -186,6 +296,27 @@ contract CampaignRegistry is ICampaignRegistry {
             revert CampaignNotFound();
         }
 
-        return block.timestamp >= campaign.startTime && block.timestamp < campaign.expiryTime;
+        uint256 remaining = campaign.budget.amount - campaign.budget.spent;
+        return block.timestamp >= campaign.startTime
+            && block.timestamp < campaign.expiryTime
+            && remaining >= campaign.budget.cpaAmount;
+    }
+
+    /**
+     * @inheritdoc ICampaignRegistry
+     */
+    function getCampaignRemainingBudget(uint256 campaignId) external view returns (uint256 remaining) {
+        Campaign storage campaign = _campaigns[campaignId];
+        if (campaign.campaignId == 0) {
+            revert CampaignNotFound();
+        }
+        return campaign.budget.amount - campaign.budget.spent;
+    }
+
+    /**
+     * @inheritdoc ICampaignRegistry
+     */
+    function isActionProcessed(bytes32 actionHash) external view returns (bool processed) {
+        return _processedActions[actionHash];
     }
 }
