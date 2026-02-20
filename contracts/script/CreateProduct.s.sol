@@ -36,7 +36,7 @@ contract CreateProduct is Script {
         uint256 advertiserId = 17854;
         string memory productName = "Demo Product";
         string memory productDescription = "This is a demo product for testing";
-        uint256 productPrice = 1 * 1e6; // 10 USDC (6 decimals)
+        uint256 productPrice = 180 * 1e6; // 180 USDC (6 decimals)
 
         console.log("Creating product in DemoPurchase contract...");
         console.log("Advertiser address:", advertiserAddress);
